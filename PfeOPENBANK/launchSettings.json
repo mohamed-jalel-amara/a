@@ -1,0 +1,26 @@
+{
+  "profiles": {
+    "Docker Compose": {
+      "commandName": "DockerCompose",
+      "commandVersion": "1.0",
+      "serviceActions": {
+        "eventbus.message": "StartDebugging",
+        "ocelotapigw": "StartDebugging",
+        "branch.api": "StartDebugging",
+        "branch.grpc": "StartDebugging",
+        "account.api": "StartDebugging",
+        "account.grpc": "StartDebugging",
+        "transaction.api": "StartDebugging",
+        "statement.api": "StartDebugging",
+        "identity.api": "StartDebugging",
+        "account.access.api": "StartDebugging",
+        "agreement.api": "StartDebugging",
+        "user.grpc": "StartDebugging",
+        "bank.api": "StartDebugging",
+        "bank.grpc": "StartDebugging",
+        "view.grpc": "StartDebugging",
+        "notification.api": "StartDebugging"
+      }
+    }
+  }
+}

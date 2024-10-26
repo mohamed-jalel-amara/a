@@ -1,0 +1,358 @@
+version: '3.4'
+
+services:
+  identityDb:
+    container_name: identityDb
+    environment:
+       - SA_PASSWORD=Identity2024@Pass
+       - ACCEPT_EULA=Y
+    restart: always
+    ports:
+       - "1433:1433"
+    networks:
+      - identity_net
+
+  cacheDb:
+    container_name: cacheDb
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - gateway_net
+
+  elasticsearch:
+    container_name: elasticsearch
+    restart: always
+    ports:
+       - 9200:9200
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    environment:
+      - xpack.monitoring.enabled=true
+      - xpack.watcher.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - discovery.type=single-node
+    networks:
+      - elastic
+
+  kibana:
+    container_name: kibana
+    restart: always
+    ports:
+        - 5601:5601
+    depends_on:
+        - elasticsearch
+    environment:
+        - ELASTICSEARCH_URL=http://localhost:9200
+    networks:
+        - elastic
+
+  rabbitmq:
+    container_name: rabbitmq
+    restart: always
+    ports:
+       - 5672:5672
+       - 15672:15672
+    volumes:
+       - ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
+       - ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
+    networks:
+       - rabbitmq_go_net
+
+  portainer:
+    container_name: portainer
+    restart: always
+    ports:
+       - "8098:8000"
+       - "9000:9000" 
+    volumes:
+       -  /var/run/docker.sock:/var/run/docker.sock
+       - portainer_data:/data
+
+  account.grpc:
+    container_name: account.grpc
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OrdsSettings:Uri=http://${EXTERNAL_IP}:8081/ords/ordsuser/account/"
+      - "OrdsSettings:DatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OrdsSettings:DatabaseUser=ordsuser"
+      - "OrdsSettings:DatabaseTableName=account"
+    ports:
+      - "8003:80"
+    networks:
+      - gateway_net
+
+  user.grpc:
+    container_name: user.grpc
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "ConnectionStrings:AuthConnectionString=Server=identityDb;Database=UserDb;User Id=sa;Password=Identity2024@Pass;"
+    depends_on:
+      - identityDb 
+    ports:
+      - "8009:80"
+    networks:
+      - identity_net
+      - gateway_net 
+
+
+  bank.grpc:
+    container_name: bank.grpc
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OrdsSettings:Uri=http://${EXTERNAL_IP}:8081/ords/ordsuser/bank/"
+      - "OrdsSettings:DatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OrdsSettings:DatabaseUser=ordsuser"
+      - "OrdsSettings:DatabaseTableName=bank"
+    ports:
+      - "8012:80"
+    networks:
+      - gateway_net 
+
+  view.grpc:
+    container_name: view.grpc
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OrdsSettings:Uri=http://${EXTERNAL_IP}:8081/ords/ordsuser/account_access/"
+      - "OrdsSettings:UserAccessUri=http://${EXTERNAL_IP}:8081/ords/ordsuser/account_user_access/"
+      - "OrdsSettings:DatabaseUrl=http://${EXTERNAL_IP}:8081"
+    ports:
+      - "8013:80"
+    networks:
+      - gateway_net 
+
+  branch.grpc:
+    container_name: branch.grpc
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OrdsSettings:Uri:http://${EXTERNAL_IP}:8081/ords/ordsuser/branch"
+      - "OrdsSettings:DatabaseUrl: http://${EXTERNAL_IP}:8081"
+    ports:
+      - "8001:80"
+    networks:
+      - gateway_net 
+
+  branch.api:
+    container_name: branch.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OracleSettings:OrdsDatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OracleSettings:DatabaseUser=ordsuser"
+      - "OracleSettings:DatabaseTableName=branch"
+      - "redis:connectionString=cacheDb:6379"
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "GrpcSettings:BankUrl=http://bank.grpc"
+    depends_on:
+      - elasticsearch
+      - cacheDb
+    ports:
+      - "8000:80"
+    networks:
+      - elastic
+      - gateway_net
+
+  account.api:
+    container_name: account.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OracleSettings:OrdsDatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OracleSettings:DatabaseUser=ordsuser"
+      - "OracleSettings:DatabaseTableName=account"
+      - "redis:connectionString=cacheDb:6379"
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "EventBusSettings:HostAddress=amqp://guest:guest@rabbitmq:5672/"
+      - "GrpcSettings:BankUrl=http://bank.grpc"
+      - "GrpcSettings:UserUrl=http://user.grpc"
+      - "GrpcSettings:AccountAccessUrl=http://view.grpc"
+    ports:
+      - "8002:80"
+    depends_on:
+      - elasticsearch
+      - rabbitmq
+      - cacheDb
+    networks:
+      - elastic
+      - rabbitmq_go_net
+      - gateway_net 
+  
+
+  transaction.api:
+    container_name: transaction.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OracleSettings:OrdsDatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OracleSettings:DatabaseUser=ordsuser"
+      - "OracleSettings:DatabaseTableName=transaction"
+      - "redis:connectionString=cacheDb:6379"
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "EventBusSettings:HostAddress=amqp://guest:guest@rabbitmq:5672/"
+      - "GrpcSettings:AccountUrl=http://account.grpc"
+      - "GrpcSettings:BankUrl=http://bank.grpc"
+      - "GrpcSettings:AccountAccessUrl=http://view.grpc"
+      - "GrpcSettings:UserUrl=http://user.grpc" 
+    ports:
+      - "8004:80"
+    depends_on:
+      - elasticsearch
+      - rabbitmq
+      - cacheDb
+    networks:
+      - elastic
+      - rabbitmq_go_net
+      - gateway_net 
+
+  statement.api:
+    container_name: statement.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OracleSettings:OrdsDatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OracleSettings:DatabaseUser=ordsuser"
+      - "OracleSettings:DatabaseTableName=transaction"
+      - "redis:connectionString=cacheDb:6379"
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "EventBusSettings:HostAddress=amqp://guest:guest@rabbitmq:5672/"
+      - "GrpcSettings:BranchUrl=http://branch.grpc"
+      - "GrpcSettings:AccountUrl=http://account.grpc"
+    ports:
+      - "8005:80"
+    depends_on:
+      - elasticsearch
+      - rabbitmq
+      - cacheDb
+    networks:
+      - elastic
+      - rabbitmq_go_net
+      - gateway_net
+
+  account.access.api:
+    container_name: account.access.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OracleSettings:OrdsDatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OracleSettings:DatabaseUser=ordsuser"
+      - "OracleSettings:DatabaseTableName=account_access"
+      - "redis:connectionString=cacheDb:6379"
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "EventBusSettings:HostAddress=amqp://guest:guest@rabbitmq:5672/"
+      - "GrpcSettings:AccountUrl=http://account.grpc"
+      - "GrpcSettings:BankUrl=http://bank.grpc"
+      - "GrpcSettings:UserUrl=http://user.grpc"
+    ports:
+      - "8006:80"
+    depends_on:
+      - elasticsearch
+      - rabbitmq
+      - cacheDb
+    networks:
+      - elastic
+      - gateway_net
+      - rabbitmq_go_net
+
+  agreement.api:
+    container_name: agreement.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OracleSettings:OrdsDatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OracleSettings:DatabaseUser=ordsuser"
+      - "OracleSettings:DatabaseTableName=account_access"
+      - "redis:connectionString=cacheDb:6379"
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "GrpcSettings:AccountUrl=http://account.grpc"
+    ports:
+      - "8007:80"
+    depends_on:
+      - elasticsearch
+      - cacheDb
+    networks:
+      - elastic
+      - gateway_net
+
+  bank.api:
+    container_name: bank.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "OracleSettings:OrdsDatabaseUrl=http://${EXTERNAL_IP}:8081"
+      - "OracleSettings:DatabaseUser=ordsuser"
+      - "redis:connectionString=cacheDb:6379"
+      - "OracleSettings:DatabaseTableName=bank"
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+    ports:
+      - "8011:80"
+    depends_on:
+      - elasticsearch
+      - cacheDb
+    networks:
+       - elastic
+       - gateway_net
+
+  notification.api:
+    container_name: notification.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "EventBusSettings:HostAddress=amqp://guest:guest@rabbitmq:5672/"
+    depends_on:
+      - elasticsearch
+      - rabbitmq
+    ports:
+      - "8014:80"
+    networks:
+      - elastic
+      - rabbitmq_go_net
+      - gateway_net
+
+  identity.api:
+    container_name: identity.api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - "ElasticConfiguration:Uri=http://elasticsearch:9200"
+      - "redis:connectionString=cacheDb:6379"
+      - "EventBusSettings:HostAddress=amqp://guest:guest@rabbitmq:5672/"
+      - "ConnectionStrings:AuthConnectionString=Server=identityDb;Database=UserDb;User Id=sa;Password=Identity2024@Pass;"
+      - "GrpcSettings:BankUrl=http://bank.grpc"
+    depends_on:
+      - identityDb
+      - elasticsearch
+      - rabbitmq
+      - cacheDb
+    ports:
+      - "8008:80"
+    networks:
+      - identity_net
+      - elastic
+      - gateway_net
+      - rabbitmq_go_net
+
+  ocelotapigw:
+    container_name: ocelotapigw
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    depends_on:
+      - branch.api
+      - account.api
+      - transaction.api
+      - statement.api
+      - identity.api
+      - bank.api
+      - account.access.api
+      - agreement.api
+      - notification.api
+    ports:
+      - "8010:80"
+    networks:
+      - gateway_net

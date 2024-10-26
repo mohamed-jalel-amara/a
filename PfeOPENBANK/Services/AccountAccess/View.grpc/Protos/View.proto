@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+option csharp_namespace = "View.grpc.Protos";
+
+// The view service definition.
+service ViewProtoService {
+  // Sends a view
+  rpc GetView (GetViewRequest) returns (ViewObject);
+  rpc GetUserView (GetUserViewRequest) returns (ViewAccess);
+  rpc GetViewsForAccount (GetViewsForAccountRequest) returns (ViewObjectList);
+}
+
+// The request message containing the user's name.
+message GetViewRequest {
+  int32 id = 1;
+}
+
+message GetViewsForAccountRequest {
+	string accountId = 1;
+}
+
+message GetUserViewRequest {
+  int32 viewId = 1;
+  string provider = 2;
+  string providerId = 3;
+}
+
+// The response message containing the view.
+message ViewObject {
+  int32 id = 1;
+  string alias = 2;
+  string whichAliasToUse = 3;
+  string shortName = 4;
+  string description = 5;
+  bool isPublic = 6;
+  bool hideMetadataIfAliasUsed = 7;
+  bool canAddMoreInfo = 8;
+  bool canSeeBankAccountBalance = 9;
+  bool canSeeBankAccountBankName = 10;
+  bool canSeeBankAccountCurrency = 11;
+  bool canSeeBankAccountIban = 12;
+  bool canSeeBankAccountLabel = 13;
+  bool canSeeBankAccountNumber = 14;
+  bool canSeeBankAccountOwners = 15;
+  bool canSeeBankAccountSwiftBic = 16;
+  bool canSeeOtherAccountBankName = 17;
+  bool canSeeOtherAccountIban = 18;
+  bool canSeeOtherAccountNumber = 19;
+  bool canSeeTransactionAmount = 20;
+  bool canSeeTransactionBalance = 21;
+  bool canSeeTransactionCurrency = 22;
+  bool canSeeTransactionFinishDate = 23;
+  bool canSeeTransactionOtherBankAccount = 24;
+  bool canSeeTransactionThisBankAccount = 25;
+  bool canAddTransReqToAnyAccount = 26;
+  string accountId = 27;
+  string bankId = 28;
+  string ownerId = 29;
+}
+
+message ViewAccess {
+  int32 id = 1;
+  int32 view_id = 2;
+  string provider =3;
+  string provider_id=4;
+}
+
+message ViewObjectList {
+	repeated ViewObject items=1;
+}

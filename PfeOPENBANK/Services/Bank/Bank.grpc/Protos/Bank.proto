@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option csharp_namespace = "Bank.grpc.Protos";
+
+service BankProtoService {
+	rpc GetBank (GetBankRequest) returns (BankObject);
+}
+
+message GetBankRequest {
+	string id =1 ;
+}
+
+message BankObject {
+	string id = 1;
+	string shortName = 2;
+	string fullName = 3;
+}
